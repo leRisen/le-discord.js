@@ -4,6 +4,10 @@ const BucketLock = require('./BucketLock');
 const DiscordAPIError = require('./DiscordAPIError');
 const HTTPError = require('./HTTPError');
 const Collection = require('../util/Collection');
+const {
+  Events: { RATE_LIMIT },
+  browser,
+} = require('../util/Constants');
 const Util = require('../util/Util');
 
 function parseResponse(res) {
@@ -44,12 +48,15 @@ class RequestHandler {
   }
 
   limited(bucket) {
-    return (this.restManager.globalTimeout ||
-      (bucket ? checkBucketUsable(bucket) : this.bucketHashes.some(hash =>
-        checkBucketUsable(this.restManager.buckets.get(hash))))
-    ) &&
-      (bucket ? checkBucketReset(bucket) : this.bucketHashes.some(hash =>
-        checkBucketReset(this.restManager.buckets.get(hash))));
+    return (
+      (this.restManager.globalTimeout ||
+        (bucket
+          ? checkBucketUsable(bucket)
+          : this.bucketHashes.some(hash => checkBucketUsable(this.restManager.buckets.get(hash))))) &&
+      (bucket
+        ? checkBucketReset(bucket)
+        : this.bucketHashes.some(hash => checkBucketReset(this.restManager.buckets.get(hash))))
+    );
   }
 
   bucketFor(method) {
@@ -75,7 +82,7 @@ class RequestHandler {
   }
 
   /* eslint-disable-next-line complexity */
-  async run(item) {
+  async run() {
     if (!this.requestQueue.length) return null;
 
     const requestData = this.requestQueue.shift();
@@ -136,9 +143,7 @@ class RequestHandler {
       res = await request.make();
     } catch (error) {
       // NodeFetch error expected for all "operational" errors, such as 500 status code
-      reject(
-        new HTTPError(error.message, error.constructor.name, error.status, request.method, request.path, stack)
-      );
+      reject(new HTTPError(error.message, error.constructor.name, error.status, request.method, request.path, stack));
     }
 
     if (res) {
@@ -159,7 +164,7 @@ class RequestHandler {
     Remaining: ${remaining}
     Limit    : ${limit}
     Reset    : ${resetAfter} seconds`,
-            request.method
+            request.method,
           );
           this.bucketHashes.set(request.method, bucketHash);
           bucket = this.bucketFor(request.method);
@@ -169,7 +174,7 @@ class RequestHandler {
           limit ? Number(limit) : bucket.limit || Infinity,
           remaining ? Number(remaining) : bucket.remaining || 1,
           reset ? calculateReset(reset, serverDate) : Date.now(),
-          retryAfter ? Number(retryAfter) : -1
+          retryAfter ? Number(retryAfter) : -1,
         );
 
         // https://github.com/discordapp/discord-api-docs/issues/182
@@ -204,15 +209,21 @@ class RequestHandler {
     Hash       : ${bucket.hash}
     Limit      : ${bucket.limit}
     Reset      : ${new Date(bucket.reset).toISOString()}
-    Retry After: ${bucket.retryAfter}`);
+    Retry After: ${bucket.retryAfter}`,
+        );
         await Util.delayFor(bucket.retryAfter);
       } else if (res.status >= 500 && res.status <= 600) {
         // Retry the specified number of times for possible serverside issues
         if (retries === this.restManager.client.options.retryLimit) {
           reject(
             new HTTPError(
-              res.statusText, res.constructor.name, res.status, requestData.request.method, request.path, stack
-            )
+              res.statusText,
+              res.constructor.name,
+              res.status,
+              requestData.request.method,
+              request.path,
+              stack,
+            ),
           );
         } else {
           requestData.retries++;
@@ -226,9 +237,7 @@ class RequestHandler {
             reject(new DiscordAPIError(request.path, data, request.method, res.status, stack));
           }
         } catch (err) {
-          reject(
-            new HTTPError(err.message, err.constructor.name, err.status, request.method, request.path, stack)
-          );
+          reject(new HTTPError(err.message, err.constructor.name, err.status, request.method, request.path, stack));
         }
       }
     }

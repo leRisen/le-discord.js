@@ -29,16 +29,17 @@ function apiRouter(restManager) {
           else normalizedRoute.push(r);
         }
         // Method, normalized route, full path, otherOptions, stack
-        return options => restManager.request(
-          name,
-          normalizedRoute.join('/'),
-          route.join('/'),
-          {
-            ...options,
-            versioned: restManager.versioned,
-          },
-          stackHolder.stack,
-        );
+        return options =>
+          restManager.request(
+            name,
+            normalizedRoute.join('/'),
+            route.join('/'),
+            {
+              ...options,
+              versioned: restManager.versioned,
+            },
+            stackHolder.stack,
+          );
       }
       route.push(name);
       return new Proxy(noop, handler);

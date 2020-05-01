@@ -2,9 +2,10 @@
 
 require('setimmediate');
 const EventEmitter = require('events');
+const apiRouter = require('../rest/APIRouter');
 const RESTManager = require('../rest/RESTManager');
 const { DefaultOptions } = require('../util/Constants');
-const apiRouter = require('../rest/APIRouter');
+const Util = require('../util/Util');
 
 /**
  * The base class for all clients.

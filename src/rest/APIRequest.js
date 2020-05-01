@@ -28,8 +28,9 @@ class APIRequest {
 
   make() {
     const { client } = this.restManager;
-    const API = !this.options.versioned ? client.options.http.api :
-      `${client.options.http.api}/v${client.options.http.version}`;
+    const API = !this.options.versioned
+      ? client.options.http.api
+      : `${client.options.http.api}/v${client.options.http.version}`;
     const finalURL = `${API}${this.path}`;
     let headers = {};
 
