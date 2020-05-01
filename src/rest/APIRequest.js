@@ -6,14 +6,14 @@ const { browser, UserAgent } = require('../util/Constants');
 const fetch = require('node-fetch');
 const AbortController = require('abort-controller');
 
-if (https.Agent) var agent = new https.Agent({ keepAlive: true });
+let agent;
+if (https.Agent) agent = new https.Agent({ keepAlive: true });
 
 class APIRequest {
-  constructor(rest, method, path, options) {
-    this.rest = rest;
-    this.client = rest.client;
-    this.method = method;
-    this.route = options.route;
+  constructor(restManager, httpMethod, path, options) {
+    Object.defineProperty(this, 'restManager', { value: restManager });
+
+    this.method = httpMethod;
     this.options = options;
 
     let queryString = '';
@@ -22,19 +22,22 @@ class APIRequest {
       const query = Object.entries(options.query).filter(([, value]) => value !== null && typeof value !== 'undefined');
       queryString = new URLSearchParams(query).toString();
     }
+
     this.path = `${path}${queryString && `?${queryString}`}`;
   }
 
   make() {
-    const API = this.options.versioned === false ? this.client.options.http.api :
-      `${this.client.options.http.api}/v${this.client.options.http.version}`;
-    const url = API + this.path;
+    const { client } = this.restManager;
+    const API = !this.options.versioned ? client.options.http.api :
+      `${client.options.http.api}/v${client.options.http.version}`;
+    const finalURL = `${API}${this.path}`;
     let headers = {};
 
-    if (this.options.auth !== false) headers.Authorization = this.rest.getAuth();
+    if (!this.options.auth) headers.Authorization = this.restManager.authToken;
     if (this.options.reason) headers['X-Audit-Log-Reason'] = encodeURIComponent(this.options.reason);
     if (!browser) headers['User-Agent'] = UserAgent;
     if (this.options.headers) headers = Object.assign(headers, this.options.headers);
+    headers['X-RateLimit-Precision'] = 'millisecond';
 
     let body;
     if (this.options.files) {
@@ -48,14 +51,14 @@ class APIRequest {
     }
 
     const controller = new AbortController();
-    const timeout = this.client.setTimeout(() => controller.abort(), this.client.options.restRequestTimeout);
-    return fetch(url, {
+    const timeout = client.setTimeout(() => controller.abort(), client.options.restRequestTimeout);
+    return fetch(finalURL, {
       method: this.method,
       headers,
       agent,
       body,
       signal: controller.signal,
-    }).finally(() => this.client.clearTimeout(timeout));
+    }).finally(() => client.clearTimeout(timeout));
   }
 }
 

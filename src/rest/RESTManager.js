@@ -4,7 +4,8 @@ const RequestHandler = require('./RequestHandler');
 const APIRequest = require('./APIRequest');
 const routeBuilder = require('./APIRouter');
 const { Error } = require('../errors');
-const { Endpoints } = require('../util/Constants');
+const { Endpoints, Events } = require('../util/Constants');
+const { createPromiseObject } = require('../util/Util');
 const Collection = require('../util/Collection');
 
 class RESTManager {
@@ -13,53 +14,66 @@ class RESTManager {
     this.handlers = new Collection();
     this.tokenPrefix = tokenPrefix;
     this.versioned = true;
+
+    // Collection of ratelimit buckets
+    this.buckets = new Collection();
+
+    // Collection of rest handlers
+    this.handlers = new Collection();
+
+    // Global timeout for ratelimits
     this.globalTimeout = null;
+
     if (client.options.restSweepInterval > 0) {
       client.setInterval(() => {
-        this.handlers.sweep(handler => handler._inactive);
+        this.handlers.sweep(handler => handler.isInactive);
       }, client.options.restSweepInterval * 1000);
     }
-  }
 
-  get api() {
-    return routeBuilder(this);
-  }
-
-  getAuth() {
-    const token = this.client.token || this.client.accessToken;
-    if (token) return `${this.tokenPrefix} ${token}`;
-    throw new Error('TOKEN_MISSING');
+    Object.defineProperty(this, 'authToken', { value: undefined, writable: true });
   }
 
   get cdn() {
     return Endpoints.CDN(this.client.options.http.cdn);
   }
 
-  push(handler, apiRequest) {
-    return new Promise((resolve, reject) => {
-      handler.push({
-        request: apiRequest,
-        resolve,
-        reject,
-        retries: 0,
-      }).catch(reject);
-    });
-  }
+  request(method, normalizedPath, path, options = {}, stack) {
+    this._checkAuthToken();
 
-  request(method, url, options = {}) {
-    const apiRequest = new APIRequest(this, method, url, options);
-    let handler = this.handlers.get(apiRequest.route);
+    const apiRequest = new APIRequest(this, method, path, options);
+    let handler = this.handlers.get(normalizedPath);
 
     if (!handler) {
-      handler = new RequestHandler(this);
-      this.handlers.set(apiRequest.route, handler);
+      handler = new RequestHandler(this, normalizedPath);
+      this.handlers.set(normalizedPath, handler);
     }
 
-    return this.push(handler, apiRequest);
+    const { promise, resolve, reject } = createPromiseObject();
+
+    handler.queue({
+      request: apiRequest,
+      promise,
+      resolve,
+      reject,
+      retries: 0,
+      stack,
+    });
+
+    return promise;
   }
 
-  set endpoint(endpoint) {
-    this.client.options.http.api = endpoint;
+  debug(message, route) {
+    this.client.emit(Events.DEBUG, `[REST${route ? `(${route})` : ''}] ${message}`);
+  }
+
+  _checkAuthToken() {
+    if (this.authToken) return;
+    const token = this.client.token || this.client.accessToken;
+    if (token) {
+      this.authToken = `${this.tokenPrefix} ${token}`;
+      return;
+    }
+    throw new Error('TOKEN_MISSING');
   }
 }
 

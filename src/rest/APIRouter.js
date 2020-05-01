@@ -7,30 +7,39 @@ const reflectors = [
   Symbol.toPrimitive, Symbol.for('nodejs.util.inspect.custom'),
 ];
 
-function buildRoute(manager) {
+function apiRouter(restManager) {
+  const stackHolder = {};
+  Error.captureStackTrace(stackHolder, apiRouter);
   const route = [''];
   const handler = {
-    get(target, name) {
+    get(_, name) {
       if (reflectors.includes(name)) return () => route.join('/');
       if (methods.includes(name)) {
-        const routeBucket = [];
-        for (let i = 0; i < route.length; i++) {
-          // Reactions routes and sub-routes all share the same bucket
-          if (route[i - 1] === 'reactions') break;
-          // Literal IDs should only be taken account if they are the Major ID (the Channel/Guild ID)
-          if (/\d{16,19}/g.test(route[i]) && !/channels|guilds/.test(route[i - 1])) routeBucket.push(':id');
-          // All other parts of the route should be considered as part of the bucket identifier
-          else routeBucket.push(route[i]);
+        const normalizedRoute = [];
+        for (const [i, r] of route.entries()) {
+          if (r === 'reactions') {
+            normalizedRoute.push('reactions/*');
+            break;
+          }
+          if (/\d{16,19}/g.test(r) && !/channels|guilds|webhooks/.test(route[i - 1])) normalizedRoute.push(':id');
+          else normalizedRoute.push(r);
         }
-        return options => manager.request(name, route.join('/'), Object.assign({
-          versioned: manager.versioned,
-          route: routeBucket.join('/'),
-        }, options));
+        // Method, normalized route, full path, otherOptions, stack
+        return options => restManager.request(
+          name,
+          normalizedRoute.join('/'),
+          route.join('/'),
+          {
+            ...options,
+            versioned: restManager.versioned,
+          },
+          stackHolder.stack,
+        );
       }
       route.push(name);
       return new Proxy(noop, handler);
     },
-    apply(target, _, args) {
+    apply(_, __, args) {
       route.push(...args.filter(x => x != null)); // eslint-disable-line eqeqeq
       return new Proxy(noop, handler);
     },
@@ -38,4 +47,4 @@ function buildRoute(manager) {
   return new Proxy(noop, handler);
 }
 
-module.exports = buildRoute;
+module.exports = apiRouter;
