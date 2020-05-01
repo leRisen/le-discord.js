@@ -1,10 +1,10 @@
 'use strict';
 
-const FormData = require('form-data');
 const https = require('https');
-const { browser, UserAgent } = require('../util/Constants');
-const fetch = require('node-fetch');
+const FormData = require('@discordjs/form-data');
 const AbortController = require('abort-controller');
+const fetch = require('node-fetch');
+const { browser, UserAgent } = require('../util/Constants');
 
 let agent;
 if (https.Agent) agent = new https.Agent({ keepAlive: true });
@@ -40,12 +40,13 @@ class APIRequest {
     headers['X-RateLimit-Precision'] = 'millisecond';
 
     let body;
-    if (this.options.files) {
+    if (this.options.files && this.options.files.length) {
       body = new FormData();
       for (const file of this.options.files) if (file && file.file) body.append(file.name, file.file, file.name);
       if (typeof this.options.data !== 'undefined') body.append('payload_json', JSON.stringify(this.options.data));
       if (!browser) headers = Object.assign(headers, body.getHeaders());
-    } else if (this.options.data != null) { // eslint-disable-line eqeqeq
+      // eslint-disable-next-line eqeqeq
+    } else if (this.options.data != null) {
       body = JSON.stringify(this.options.data);
       headers['Content-Type'] = 'application/json';
     }

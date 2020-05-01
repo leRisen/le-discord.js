@@ -1,12 +1,13 @@
 'use strict';
 
-const RequestHandler = require('./RequestHandler');
 const APIRequest = require('./APIRequest');
 const routeBuilder = require('./APIRouter');
+const RequestHandler = require('./RequestHandler');
 const { Error } = require('../errors');
 const { Endpoints, Events } = require('../util/Constants');
 const { createPromiseObject } = require('../util/Util');
 const Collection = require('../util/Collection');
+const { Endpoints } = require('../util/Constants');
 
 class RESTManager {
   constructor(client, tokenPrefix = 'Bot') {

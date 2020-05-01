@@ -1,9 +1,8 @@
 'use strict';
 
 const Collection = require('../util/Collection');
-const Util = require('../util/Util');
-const GuildMember = require('./GuildMember');
 const { ChannelTypes } = require('../util/Constants');
+const Util = require('../util/Util');
 
 /**
  * Keeps track of mentions in a {@link Message}.
@@ -174,6 +173,7 @@ class MessageMentions {
    */
   has(data, { ignoreDirect = false, ignoreRoles = false, ignoreEveryone = false } = {}) {
     if (!ignoreEveryone && this.everyone) return true;
+    const GuildMember = require('./GuildMember');
     if (!ignoreRoles && data instanceof GuildMember) {
       for (const role of this.roles.values()) if (data.roles.cache.has(role.id)) return true;
     }

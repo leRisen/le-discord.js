@@ -175,11 +175,11 @@ class WebSocketShard extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       const cleanup = () => {
-        this.off(ShardEvents.CLOSE, onClose);
-        this.off(ShardEvents.READY, onReady);
-        this.off(ShardEvents.RESUMED, onResumed);
-        this.off(ShardEvents.INVALID_SESSION, onInvalidOrDestroyed);
-        this.off(ShardEvents.DESTROYED, onInvalidOrDestroyed);
+        this.removeListener(ShardEvents.CLOSE, onClose);
+        this.removeListener(ShardEvents.READY, onReady);
+        this.removeListener(ShardEvents.RESUMED, onResumed);
+        this.removeListener(ShardEvents.INVALID_SESSION, onInvalidOrDestroyed);
+        this.removeListener(ShardEvents.DESTROYED, onInvalidOrDestroyed);
       };
 
       const onReady = () => {
@@ -237,14 +237,15 @@ class WebSocketShard extends EventEmitter {
     Gateway    : ${gateway}
     Version    : ${client.options.ws.version}
     Encoding   : ${WebSocket.encoding}
-    Compression: ${zlib ? 'zlib-stream' : 'none'}`);
+    Compression: ${zlib ? 'zlib-stream' : 'none'}`,
+      );
 
       this.status = this.status === Status.DISCONNECTED ? Status.RECONNECTING : Status.CONNECTING;
       this.setHelloTimeout();
 
       this.connectedAt = Date.now();
 
-      const ws = this.connection = WebSocket.create(gateway, wsQuery);
+      const ws = (this.connection = WebSocket.create(gateway, wsQuery));
       ws.onopen = this.onOpen.bind(this);
       ws.onmessage = this.onMessage.bind(this);
       ws.onerror = this.onError.bind(this);
@@ -271,11 +272,8 @@ class WebSocketShard extends EventEmitter {
     if (data instanceof ArrayBuffer) data = new Uint8Array(data);
     if (zlib) {
       const l = data.length;
-      const flush = l >= 4 &&
-        data[l - 4] === 0x00 &&
-        data[l - 3] === 0x00 &&
-        data[l - 2] === 0xFF &&
-        data[l - 1] === 0xFF;
+      const flush =
+        l >= 4 && data[l - 4] === 0x00 && data[l - 3] === 0x00 && data[l - 2] === 0xff && data[l - 1] === 0xff;
 
       this.inflate.push(data, flush && zlib.Z_SYNC_FLUSH);
       if (!flush) return;
@@ -409,6 +407,7 @@ class WebSocketShard extends EventEmitter {
         this.identify();
         break;
       case OPCodes.RECONNECT:
+        this.debug('[RECONNECT] Discord asked us to reconnect');
         this.destroy({ closeCode: 4000 });
         break;
       case OPCodes.INVALID_SESSION:
@@ -431,7 +430,7 @@ class WebSocketShard extends EventEmitter {
         this.ackHeartbeat();
         break;
       case OPCodes.HEARTBEAT:
-        this.sendHeartbeat('HeartbeatRequest');
+        this.sendHeartbeat('HeartbeatRequest', true);
         break;
       default:
         this.manager.handlePacket(packet, this);
@@ -529,8 +528,10 @@ class WebSocketShard extends EventEmitter {
    * @param {boolean} [ignoreHeartbeatAck] If we should send the heartbeat forcefully.
    * @private
    */
-  sendHeartbeat(tag = 'HeartbeatTimer',
-    ignoreHeartbeatAck = [Status.WAITING_FOR_GUILDS, Status.IDENTIFYING, Status.RESUMING].includes(this.status)) {
+  sendHeartbeat(
+    tag = 'HeartbeatTimer',
+    ignoreHeartbeatAck = [Status.WAITING_FOR_GUILDS, Status.IDENTIFYING, Status.RESUMING].includes(this.status),
+  ) {
     if (ignoreHeartbeatAck && !this.lastHeartbeatAcked) {
       this.debug(`[${tag}] Didn't process heartbeat ack yet but we are still connected. Sending one now.`);
     } else if (!this.lastHeartbeatAcked) {
@@ -538,7 +539,8 @@ class WebSocketShard extends EventEmitter {
         `[${tag}] Didn't receive a heartbeat ack last time, assuming zombie connection. Destroying and reconnecting.
     Status          : ${STATUS_KEYS[this.status]}
     Sequence        : ${this.sequence}
-    Connection State: ${this.connection ? CONNECTION_STATE[this.connection.readyState] : 'No Connection??'}`);
+    Connection State: ${this.connection ? CONNECTION_STATE[this.connection.readyState] : 'No Connection??'}`,
+      );
 
       this.destroy({ closeCode: 4009, reset: true });
       return;
@@ -741,10 +743,7 @@ class WebSocketShard extends EventEmitter {
    * @private
    */
   _cleanupConnection() {
-    this.connection.onopen =
-    this.connection.onclose =
-    this.connection.onerror =
-    this.connection.onmessage = null;
+    this.connection.onopen = this.connection.onclose = this.connection.onerror = this.connection.onmessage = null;
   }
 
   /**

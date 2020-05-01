@@ -1,12 +1,12 @@
 'use strict';
 
-const DataResolver = require('../util/DataResolver');
-const MessageEmbed = require('./MessageEmbed');
 const MessageAttachment = require('./MessageAttachment');
-const { browser } = require('../util/Constants');
-const Util = require('../util/Util');
+const MessageEmbed = require('./MessageEmbed');
 const { RangeError } = require('../errors');
+const { browser } = require('../util/Constants');
+const DataResolver = require('../util/DataResolver');
 const MessageFlags = require('../util/MessageFlags');
+const Util = require('../util/Util');
 
 /**
  * Represents a message to be sent to the API.
@@ -78,7 +78,7 @@ class APIMessage {
    * Makes the content of this message.
    * @returns {?(string|string[])}
    */
-  makeContent() { // eslint-disable-line complexity
+  makeContent() {
     const GuildMember = require('./GuildMember');
 
     let content;
@@ -86,6 +86,22 @@ class APIMessage {
       content = '';
     } else if (typeof this.options.content !== 'undefined') {
       content = Util.resolveString(this.options.content);
+    }
+
+    const disableMentions =
+      typeof this.options.disableMentions === 'undefined'
+        ? this.target.client.options.disableMentions
+        : this.options.disableMentions;
+    if (disableMentions === 'all') {
+      content = Util.removeMentions(content || '');
+    } else if (disableMentions === 'everyone') {
+      content = (content || '').replace(/@([^<>@ ]*)/gmsu, (match, target) => {
+        if (target.match(/^[&!]?\d+$/)) {
+          return `@${target}`;
+        } else {
+          return `@\u200b${target}`;
+        }
+      });
     }
 
     const isSplit = typeof this.options.split !== 'undefined' && this.options.split !== false;
@@ -111,13 +127,6 @@ class APIMessage {
         }
       } else if (mentionPart) {
         content = `${mentionPart}${content || ''}`;
-      }
-
-      const disableEveryone = typeof this.options.disableEveryone === 'undefined' ?
-        this.target.client.options.disableEveryone :
-        this.options.disableEveryone;
-      if (disableEveryone) {
-        content = (content || '').replace(/@(everyone|here)/g, '@\u200b$1');
       }
 
       if (isSplit) {
@@ -152,7 +161,7 @@ class APIMessage {
     } else if (this.options.embed) {
       embedLikes.push(this.options.embed);
     }
-    const embeds = embedLikes.map(e => new MessageEmbed(e)._apiTransform());
+    const embeds = embedLikes.map(e => new MessageEmbed(e).toJSON());
 
     let username;
     let avatarURL;
@@ -167,6 +176,11 @@ class APIMessage {
       flags = this.options.flags != null ? new MessageFlags(this.options.flags).bitfield : this.target.flags.bitfield;
     }
 
+    const allowedMentions =
+      typeof this.options.allowedMentions === 'undefined'
+        ? this.target.client.options.allowedMentions
+        : this.options.allowedMentions;
+
     this.data = {
       content,
       tts,
@@ -175,6 +189,7 @@ class APIMessage {
       embeds,
       username,
       avatar_url: avatarURL,
+      allowed_mentions: allowedMentions,
       flags,
     };
     return this;
@@ -262,7 +277,8 @@ class APIMessage {
       return 'file.jpg';
     };
 
-    const ownAttachment = typeof fileLike === 'string' ||
+    const ownAttachment =
+      typeof fileLike === 'string' ||
       fileLike instanceof (browser ? ArrayBuffer : Buffer) ||
       typeof fileLike.pipe === 'function';
     if (ownAttachment) {
